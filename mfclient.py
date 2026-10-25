@@ -1229,6 +1229,82 @@ class mf_client():
                 yield " %-10s | %s | %s" % (asset_id, size, name)
 
 #------------------------------------------------------------
+    @staticmethod
+    def _mtime_rfc3339(text):
+        """
+        Convert a mediaflux mtime (epoch milliseconds, or the dd-Mon-yyyy HH:MM:SS display form) to RFC3339
+        """
+        if text is None:
+            return ""
+        try:
+            ms = int(text)
+            dt = datetime.datetime.fromtimestamp(ms / 1000.0, datetime.timezone.utc)
+            return dt.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (ms % 1000)
+        except ValueError:
+            pass
+# NB: display form is server local time with no zone info
+        try:
+            return datetime.datetime.strptime(text, "%d-%b-%Y %H:%M:%S").isoformat()
+        except ValueError:
+            return text
+
+#------------------------------------------------------------
+    def lsjson_query(self, pattern):
+        """
+        Build the asset.query line used by lsjson_iter()
+        """
+        return 'asset.query %s :as iterator :action get-values :xpath -ename id id :xpath -ename path path :xpath -ename size content/size :xpath -ename mtime mtime/@millisec :xpath -ename type content/type :xpath -ename csum content/csum' % self.get_query(pattern)
+
+#------------------------------------------------------------
+    def lsjson_iter(self, pattern):
+        """
+        generator for rclone lsjson style listing - yields one dict per folder/file
+        """
+        pattern = pattern.rstrip('/') or '/'
+        is_namespace = self.namespace_exists(pattern)
+        if is_namespace:
+            root = pattern
+        else:
+            root = posixpath.dirname(pattern)
+            if self.namespace_exists(root) is False:
+                raise Exception("No such file or folder")
+
+# folders (namespaces can't be pattern matched, so only when listing a folder)
+        if is_namespace:
+            reply = self.aterm_run('asset.namespace.list :namespace "%s"' % root.replace('"', '\\\"'))
+            for ns in reply.findall('.//namespace/namespace'):
+                yield {'Path': ns.text, 'Name': ns.text, 'Size': -1, 'MimeType': 'inode/directory', 'ModTime': "", 'IsDir': True}
+
+# files
+        result = self.aterm_run(self.lsjson_query(pattern))
+        elem = result.find(".//iterator")
+        iterator = int(elem.text)
+
+        iterate_size = 100
+        complete = "false"
+        while complete != "true":
+            result = self.aterm_run("asset.query.iterate :id %d :size %d" % (iterator, iterate_size))
+            elem = result.find(".//iterated")
+            if elem is not None:
+                complete = elem.attrib['complete'].lower()
+            self.logging.debug("asset query iterator chunk [%d] - complete[%s]" % (iterator, complete))
+            for elem in result.findall(".//asset"):
+                values = {}
+                for child in elem:
+                    values[child.tag] = child.text
+                path = values.get('path') or ''
+                try:
+                    size = int(values.get('size'))
+                except (TypeError, ValueError):
+                    size = -1
+                item = {'Path': posixpath.relpath(path, root), 'Name': posixpath.basename(path), 'Size': size,
+                        'MimeType': values.get('type') or "", 'ModTime': self._mtime_rfc3339(values.get('mtime')),
+                        'IsDir': False, 'ID': values.get('id')}
+                if values.get('csum'):
+                    item['Hashes'] = {'crc32': values['csum'].lower()}
+                yield item
+
+#------------------------------------------------------------
     def get_local_checksum(self, filepath):
         """
         Compute crc32 checksum for a local file

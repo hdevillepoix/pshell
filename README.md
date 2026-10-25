@@ -24,5 +24,6 @@ pshell.py - command line client for mediaflux that uses mfclient and/or s3client
 
 Features:
 - SFTP-like syntax
+- lsjson: rclone lsjson style JSON listings (mediaflux)
 - Tab completion
 - Basic support for passthru commands

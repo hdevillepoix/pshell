@@ -105,6 +105,10 @@ class parser(cmd.Cmd):
         return self.remote_complete(line[3:end_index], start_index-3)
 
 # ---
+    def complete_lsjson(self, text, line, start_index, end_index):
+        return self.remote_complete(line[7:end_index], start_index-7)
+
+# ---
     def complete_cd(self, text, line, start_index, end_index):
         return self.remote_complete(line[3:end_index], start_index-3, file_search=False)
 
@@ -544,6 +548,29 @@ class parser(cmd.Cmd):
                         return
                     else:
                         count = 0
+
+#------------------------------------------------------------
+    def help_lsjson(self):
+        print("\nList files and folders on the remote server as JSON (equivalent to rclone lsjson). Mediaflux only.\n")
+        print("Usage: lsjson <file pattern or folder name>\n")
+
+# ---
+    def do_lsjson(self, line):
+        remote = self.remote_active()
+        if not isinstance(remote, mfclient.mf_client):
+            raise Exception("lsjson: only supported on mediaflux remotes")
+
+        items = remote.lsjson_iter(self.abspath(line))
+# stream the array, but fetch the first item before printing anything so early errors produce no partial output
+        first = next(items, None)
+        if first is None:
+            print("[]")
+            return
+        sys.stdout.write("[\n%s" % json.dumps(first, ensure_ascii=False))
+        for item in items:
+            sys.stdout.write(",\n%s" % json.dumps(item, ensure_ascii=False))
+        sys.stdout.write("\n]\n")
+        sys.stdout.flush()
 
 #------------------------------------------------------------
     def help_import(self):
