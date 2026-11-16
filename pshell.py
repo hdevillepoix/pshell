@@ -198,7 +198,9 @@ def main():
         for item in input_list:
             line = item.strip()
             try:
-                print("%s:%s> %s" % (my_parser.remotes_current, my_parser.cwd, line))
+# lsjson output must be pure JSON on stdout, so don't echo the prompt for it
+                if line.split(maxsplit=1)[:1] != ["lsjson"]:
+                    print("%s:%s> %s" % (my_parser.remotes_current, my_parser.cwd, line))
                 my_parser.onecmd(line)
             except KeyboardInterrupt:
                 print(" Interrupted")

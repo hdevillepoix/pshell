@@ -185,6 +185,24 @@ class mfclient_bugs(unittest.TestCase):
         self.assertEqual(reply, '<request><service name="system.logon"><args><domain>system</domain><user>test</user><password>%s</password></args></service></request>' % expect)
 
 
+# --- lsjson
+    def test_lsjson_mtime_millisec(self):
+        self.assertEqual(self.mf_client._mtime_rfc3339("1564662896123"), "2019-08-01T12:34:56.123Z")
+
+    def test_lsjson_mtime_display(self):
+        self.assertEqual(self.mf_client._mtime_rfc3339("01-Aug-2019 12:34:56"), "2019-08-01T12:34:56")
+
+    def test_lsjson_query_pattern(self):
+# offline - pretend the pattern is not a namespace
+        self.mf_client.namespace_exists = lambda namespace: False
+        try:
+            line = self.mf_client.lsjson_query("/projects/DFN/*.NEF")
+        finally:
+            del self.mf_client.namespace_exists
+        self.assertEqual(line, 'asset.query :where "namespace=\'/projects/DFN\' and name=\'*.NEF\'" :as iterator :action get-values :xpath -ename id id :xpath -ename path path :xpath -ename size content/size :xpath -ename mtime mtime/@millisec :xpath -ename type content/type :xpath -ename csum content/csum')
+        reply = self.mf_client.aterm_run(line, post=False)
+        self.assertIn('<where>namespace=\'/projects/DFN\' and name=\'*.NEF\'</where>', self._peel(reply))
+
 # new features
 class mfclient_features(unittest.TestCase):
     def setUp(self):
